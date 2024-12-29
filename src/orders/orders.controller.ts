@@ -7,9 +7,8 @@ import { OrdersPaginationDto, UpdateOrderDto } from './dto';
 @Controller()
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
-
   @MessagePattern('createOrder')
-  create(@Payload() createOrderDto: CreateOrderDto) {
+  async create(@Payload() createOrderDto: CreateOrderDto) {
     try {
       return this.ordersService.create(createOrderDto);
     } catch (error) {
