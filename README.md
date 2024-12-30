@@ -34,7 +34,10 @@ $ npm install
 
 ## Compile and run the project
 
+
 ```bash
+# # postgress database
+$ docker compose up -d  
 # development
 $ npm run start
 
