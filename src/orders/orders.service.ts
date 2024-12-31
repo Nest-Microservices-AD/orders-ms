@@ -7,11 +7,13 @@ import {
 } from '@nestjs/common';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
-import { PrismaClient } from '@prisma/client';
+import { OrderStatus, PrismaClient } from '@prisma/client';
 import { OrdersPaginationDto } from './dto';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { NATS_SERVICE } from 'src/config/services';
 import { catchError, firstValueFrom } from 'rxjs';
+import { OrderWithProducts } from './common/interfaces/order-with-products.interface';
+import { OrderPaymentDto } from './dto/order-payment.dto';
 
 @Injectable()
 export class OrdersService extends PrismaClient implements OnModuleInit {
@@ -168,6 +170,50 @@ export class OrdersService extends PrismaClient implements OnModuleInit {
       },
       data: {
         status: updateOrderDto.status,
+      },
+    });
+  }
+
+  async createPaymentSession(order: OrderWithProducts) {
+    const paymentSession: OrderWithProducts = await firstValueFrom(
+      this.natsClient
+        .send('create.payment.session', {
+          orderId: order.id,
+          currency: 'usd',
+          items: order.OrderItem.map((item) => ({
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+        })
+        .pipe(
+          catchError((error) => {
+            throw new RpcException({
+              message: error.message,
+              status: HttpStatus.INTERNAL_SERVER_ERROR,
+            });
+          }),
+        ),
+    );
+    return { order, paymentSession };
+  }
+
+  paymentSuccess(orderPaymentDto: OrderPaymentDto) {
+    return this.order.update({
+      where: {
+        id: orderPaymentDto.orderId,
+      },
+      data: {
+        paid: true,
+        paydAt: new Date(),
+        status: OrderStatus.PAID,
+        stripeChargeId: orderPaymentDto.stripePaymentId,
+        OrderReceipt: {
+          create: {
+            receiptUrl: orderPaymentDto.receiptUrl,
+            stripeChargeId: orderPaymentDto.stripePaymentId,
+          },
+        },
       },
     });
   }
